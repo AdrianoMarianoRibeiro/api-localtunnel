@@ -1,0 +1,6 @@
+FROM node:22-alpine
+WORKDIR /tunnel
+RUN npm install -g localtunnel
+COPY scripts/start-tunnel.sh /usr/local/bin/start-tunnel.sh
+RUN chmod +x /usr/local/bin/start-tunnel.sh
+CMD ["start-tunnel.sh"]

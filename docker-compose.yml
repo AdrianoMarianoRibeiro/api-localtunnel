@@ -1,0 +1,37 @@
+services:
+  api-localtunnel-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-localtunnel-app
+    environment:
+      APP_HOST: ${APP_HOST:-0.0.0.0}
+      APP_PORT: ${APP_PORT:-3337}
+      TUNNEL_HOST: ${TUNNEL_HOST:-https://localtunnel.me}
+      TUNNEL_SUBDOMAIN: ${TUNNEL_SUBDOMAIN:-api-local}
+      TUNNEL_PORT: ${TUNNEL_PORT:-3337}
+    ports:
+      - "${APP_PORT:-3337}:${APP_PORT:-3337}"
+    networks:
+      - localtunnel-net
+    restart: unless-stopped
+
+  tunnel:
+    build:
+      context: .
+      dockerfile: Dockerfile.tunnel
+    container_name: api-localtunnel-tunnel
+    depends_on:
+      - api-localtunnel-app
+    environment:
+      TUNNEL_LOCAL_HOST: api-localtunnel-app
+      TUNNEL_PORT: ${TUNNEL_PORT:-3337}
+      TUNNEL_SUBDOMAIN: ${TUNNEL_SUBDOMAIN:-api-local}
+      TUNNEL_HOST: ${TUNNEL_HOST:-https://localtunnel.me}
+    networks:
+      - localtunnel-net
+    restart: unless-stopped
+
+networks:
+  localtunnel-net:
+    driver: bridge
