@@ -1,6 +1,17 @@
 FROM node:22-alpine
 WORKDIR /tunnel
+
+RUN apk add --no-cache curl bash
+
+# Install localtunnel as fallback
 RUN npm install -g localtunnel
+
+# Install cloudflared
+RUN curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+  -o /usr/local/bin/cloudflared \
+  && chmod +x /usr/local/bin/cloudflared
+
 COPY scripts/start-tunnel.sh /usr/local/bin/start-tunnel.sh
 RUN chmod +x /usr/local/bin/start-tunnel.sh
+
 CMD ["start-tunnel.sh"]

@@ -7,15 +7,23 @@ services:
     environment:
       APP_HOST: ${APP_HOST:-0.0.0.0}
       APP_PORT: ${APP_PORT:-3337}
-      TUNNEL_HOST: ${TUNNEL_HOST:-https://localtunnel.me}
-      TUNNEL_SUBDOMAIN: ${TUNNEL_SUBDOMAIN:-api-local}
+      TUNNEL_ENABLED: ${TUNNEL_ENABLED:-true}
+      TUNNEL_PROVIDER: ${TUNNEL_PROVIDER:-cloudflare}
       TUNNEL_PORT: ${TUNNEL_PORT:-3337}
+      TUNNEL_SUBDOMAIN: ${TUNNEL_SUBDOMAIN:-api-local}
+      TUNNEL_HOST: ${TUNNEL_HOST:-https://localtunnel.me}
+      TUNNEL_STRICT_SUBDOMAIN: ${TUNNEL_STRICT_SUBDOMAIN:-true}
+      # cloudflared
+      CLOUDFLARED_HOSTNAME: ${CLOUDFLARED_HOSTNAME:-}
+      CLOUDFLARED_TOKEN: ${CLOUDFLARED_TOKEN:-}
+      CLOUDFLARED_BINARY: ${CLOUDFLARED_BINARY:-/usr/local/bin/cloudflared}
     ports:
       - "${APP_PORT:-3337}:${APP_PORT:-3337}"
     networks:
       - localtunnel-net
     restart: unless-stopped
 
+  # --- Tunnel sidecar (cloudflared) ---
   tunnel:
     build:
       context: .
@@ -24,10 +32,14 @@ services:
     depends_on:
       - api-localtunnel-app
     environment:
+      TUNNEL_PROVIDER: ${TUNNEL_PROVIDER:-cloudflare}
       TUNNEL_LOCAL_HOST: api-localtunnel-app
       TUNNEL_PORT: ${TUNNEL_PORT:-3337}
       TUNNEL_SUBDOMAIN: ${TUNNEL_SUBDOMAIN:-api-local}
       TUNNEL_HOST: ${TUNNEL_HOST:-https://localtunnel.me}
+      # cloudflared
+      CLOUDFLARED_HOSTNAME: ${CLOUDFLARED_HOSTNAME:-}
+      CLOUDFLARED_TOKEN: ${CLOUDFLARED_TOKEN:-}
     networks:
       - localtunnel-net
     restart: unless-stopped
