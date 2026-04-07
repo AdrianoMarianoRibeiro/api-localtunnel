@@ -150,6 +150,7 @@ function main() {
 
   const requestedSubdomain = getFlagValue(forwarded, ['--subdomain', '-s']);
   const requestedHost = normalizeHost(getFlagValue(forwarded, ['--host', '-h']));
+  const strictSubdomain = /^(1|true|yes|on)$/i.test(String(process.env.TUNNEL_STRICT_SUBDOMAIN || ''));
 
   const ltPath = path.join(__dirname, '..', 'node_modules', 'localtunnel', 'bin', 'lt.js');
   const child = spawn(process.execPath, [ltPath, ...forwarded], {
@@ -182,14 +183,20 @@ function main() {
       const actualHostTail = actualHost.split('.').slice(1).join('.');
 
       if (actualSubdomain !== requestedSubdomain || !areEquivalentTunnelHosts(requestedHost, actualHostTail)) {
-        forcedExitCode = 1;
         console.error(
           `[tunnel] Requested subdomain "${requestedSubdomain}" was not granted. Got "${url.href}" instead.`,
         );
-        console.error(
-          `[tunnel] This usually means the subdomain is unavailable on ${expectedHost}. Try another one or run your own localtunnel server.`,
-        );
-        child.kill('SIGINT');
+        if (strictSubdomain) {
+          forcedExitCode = 1;
+          console.error(
+            `[tunnel] Strict mode enabled (TUNNEL_STRICT_SUBDOMAIN=1): stopping because requested host is unavailable on ${expectedHost}.`,
+          );
+          child.kill('SIGINT');
+        } else {
+          console.warn(
+            `[tunnel] Continuing with fallback URL. Set TUNNEL_STRICT_SUBDOMAIN=1 to fail instead.`,
+          );
+        }
       }
     } catch {
       // Ignore parse errors from non-standard output.
