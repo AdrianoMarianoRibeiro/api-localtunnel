@@ -99,6 +99,39 @@ function transformArgs(tokens) {
   return out;
 }
 
+function getFlagValue(args, names) {
+  for (let i = 0; i < args.length; i += 1) {
+    if (names.includes(args[i])) {
+      return args[i + 1];
+    }
+  }
+  return undefined;
+}
+
+function normalizeHost(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    return new URL(raw).hostname;
+  } catch {
+    return raw.replace(/^https?:\/\//i, '').split('/')[0];
+  }
+}
+
+function areEquivalentTunnelHosts(requestedHost, actualHostTail) {
+  if (!requestedHost) {
+    return true;
+  }
+  if (requestedHost === actualHostTail) {
+    return true;
+  }
+
+  const aliases = new Set(['localtunnel.me', 'loca.lt']);
+  return aliases.has(requestedHost) && aliases.has(actualHostTail);
+}
+
 function main() {
   const cleaned = stripArgSeparators(process.argv.slice(2));
 
@@ -110,12 +143,66 @@ function main() {
     process.exit(1);
   }
 
+  const defaultHost = process.env.TUNNEL_HOST;
+  if (defaultHost && !getFlagValue(forwarded, ['--host', '-h'])) {
+    forwarded.push('--host', defaultHost);
+  }
+
+  const requestedSubdomain = getFlagValue(forwarded, ['--subdomain', '-s']);
+  const requestedHost = normalizeHost(getFlagValue(forwarded, ['--host', '-h']));
+
   const ltPath = path.join(__dirname, '..', 'node_modules', 'localtunnel', 'bin', 'lt.js');
   const child = spawn(process.execPath, [ltPath, ...forwarded], {
-    stdio: 'inherit',
+    stdio: ['inherit', 'pipe', 'pipe'],
   });
 
+  let forcedExitCode;
+  const onOutput = (chunk, toStderr) => {
+    const text = chunk.toString();
+    if (toStderr) {
+      process.stderr.write(text);
+    } else {
+      process.stdout.write(text);
+    }
+
+    if (!requestedSubdomain) {
+      return;
+    }
+
+    const match = text.match(/your url is:\s*(https?:\/\/\S+)/i);
+    if (!match) {
+      return;
+    }
+
+    try {
+      const url = new URL(match[1]);
+      const actualHost = url.hostname;
+      const actualSubdomain = actualHost.split('.')[0];
+      const expectedHost = requestedHost || actualHost.split('.').slice(1).join('.');
+      const actualHostTail = actualHost.split('.').slice(1).join('.');
+
+      if (actualSubdomain !== requestedSubdomain || !areEquivalentTunnelHosts(requestedHost, actualHostTail)) {
+        forcedExitCode = 1;
+        console.error(
+          `[tunnel] Requested subdomain "${requestedSubdomain}" was not granted. Got "${url.href}" instead.`,
+        );
+        console.error(
+          `[tunnel] This usually means the subdomain is unavailable on ${expectedHost}. Try another one or run your own localtunnel server.`,
+        );
+        child.kill('SIGINT');
+      }
+    } catch {
+      // Ignore parse errors from non-standard output.
+    }
+  };
+
+  child.stdout.on('data', (chunk) => onOutput(chunk, false));
+  child.stderr.on('data', (chunk) => onOutput(chunk, true));
+
   child.on('exit', (code, signal) => {
+    if (typeof forcedExitCode === 'number') {
+      process.exit(forcedExitCode);
+    }
     if (signal) {
       process.exit(1);
     }
